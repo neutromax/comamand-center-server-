@@ -1,0 +1,24 @@
+<div class="panel">
+            <h2>File Transfer</h2>
+            <p>Start a new file transfer to one or more agents.</p>
+            <button id="start-transfer-btn">Start File Transfer</button>
+        </div>
+    </div>
+
+    <div id="transfer-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>New File Transfer</h2>
+            
+            <h4>1. Select Files</h4>
+            <input type="file" id="file-input" multiple>
+
+            <h4>2. Select Recipients</h4>
+            <div id="recipient-checklist">
+                </div>
+            
+            <button id="send-files-btn">Send Files</button>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
