@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Center - System Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Command Center</h1>
+                <div class="subtitle">Real-time System Monitor</div>
+            </div>
+            
+            <div class="devices-section">
+                <h2><i class="fas fa-desktop"></i> Connected Devices</h2>
+                <ul id="device-list">
+                    <li class="no-agents">
+                        <i>Loading devices...</i>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="server-info">
+                    <small>Server: 127.0.0.1:5000</small><br>
+                    <small id="server-time">Time: Loading...</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Welcome Screen (shown by default) -->
+            <div id="welcome">
+                <div class="welcome-icon">
+                    <i class="fas fa-chart-line" style="font-size: 60px; color: #3498db; margin-bottom: 20px;"></i>
+                </div>
+                <h1>Welcome to Command Center</h1>
+                <p>Select a device from the sidebar to view real-time metrics and performance charts.</p>
+                <p class="welcome-hint">
+                    <i class="fas fa-lightbulb"></i>
+                    Tip: Start multiple agents to monitor different systems simultaneously.
+                </p>
+            </div>
+
+            <!-- Chart Container (hidden by default) -->
+            <div id="chart-container" class="hidden">
+                <div class="chart-header">
+                    <h2 class="chart-title">Live Metrics</h2>
+                    <div class="chart-controls">
+                        <button id="refresh-chart" class="btn-control" title="Refresh Chart">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button id="export-chart" class="btn-control" title="Export Data">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- Additional Script -->
+    <script>
+        // Update server time
+        function updateServerTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-IN', {
+                hour12: true,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const dateStr = now.toLocaleDateString('en-IN', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+            
+            const serverTime = document.getElementById('server-time');
+            if (serverTime) {
+                serverTime.innerHTML = `<i class="fas fa-clock"></i> ${dateStr} ${timeStr} IST`;
+            }
+        }
+        
+        // Update time every second
+        setInterval(updateServerTime, 1000);
+        updateServerTime(); // Initial call
+        
+        // Add chart control events
+        document.addEventListener('DOMContentLoaded', function() {
+            const refreshBtn = document.getElementById('refresh-chart');
+            const exportBtn = document.getElementById('export-chart');
+            
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    if (window.dashboard && window.dashboard.loadHistory && window.dashboard.selectedAgent) {
+                        window.dashboard.loadHistory(window.dashboard.selectedAgent);
+                        this.classList.add('rotating');
+                        setTimeout(() => this.classList.remove('rotating'), 500);
+                    }
+                });
+            }
+            
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    alert('Export feature would save chart data as CSV or PNG');
+                });
+            }
+        });
+        
+        // Add CSS for rotating animation
+        const style = document.createElement('style');
+        style.textContent = `
+            .rotating {
+                animation: rotate 0.5s linear;
+            }
+            @keyframes rotate {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .btn-control {
+                background: #f0f0f0;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-left: 10px;
+                transition: background 0.3s;
+            }
+            .btn-control:hover {
+                background: #e0e0e0;
+            }
+            .chart-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .chart-title {
+                margin: 0;
+                color: #2c3e50;
+            }
+            .chart-controls {
+                display: flex;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
