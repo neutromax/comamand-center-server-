@@ -1,494 +1,529 @@
-// Command Center Dashboard JavaScript
-console.log("Dashboard loaded - Timezone Fixed");
-
 // Global variables
 let chart = null;
 let selectedAgent = null;
-let autoRefresh = true;
-let chartVisibility = {}; // Store visibility per agent
+let chartVisibility = {};
+let agentHealthCache = {};
+let updateInterval = null;
+let deviceListInterval = null;
 
-// Format timestamp to readable IST time
+// Health thresholds
+const THRESHOLDS = {
+    CRITICAL: 80,  // Red: >80%
+    WARNING: 60,   // Yellow: 60-80%
+    GOOD: 60       // Green: <60%
+};
+
+// Format timestamp for display
 function formatTimestamp(timestamp) {
-    try {
-        const date = new Date(timestamp);
-        
-        // Force 24-hour format to avoid AM/PM confusion
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        const seconds = date.getSeconds().toString().padStart(2, '0');
-        
-        return `${hours}:${minutes}:${seconds}`;
-        
-    } catch (error) {
-        return timestamp;
-    }
+    if (!timestamp) return '--:--:--';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Format date for tooltips
-function formatDate(timestamp) {
-    try {
-        const date = new Date(timestamp);
-        return date.toLocaleString('en-IN', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-    } catch (error) {
-        return timestamp;
-    }
-}
-
-// Clear selection function
-function clearSelection() {
-    selectedAgent = null;
-    
-    // Remove active class from all items
-    document.querySelectorAll(".device-item").forEach(item => {
-        item.classList.remove("active");
+// Format detailed timestamp
+function formatTimeFull(timestamp) {
+    if (!timestamp) return 'Never';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
     });
-    
-    // Show welcome, hide chart
-    const welcomeDiv = document.getElementById("welcome");
-    const chartContainer = document.getElementById("chart-container");
-    
-    if (welcomeDiv) {
-        welcomeDiv.classList.remove("hidden");
-        welcomeDiv.innerHTML = `
-            <h1>Welcome to Command Center</h1>
-            <p>Select a device from the sidebar to view real-time metrics.</p>
-        `;
-    }
-    if (chartContainer) {
-        chartContainer.classList.add("hidden");
-    }
-    
-    // Destroy chart if exists
-    if (chart) {
-        chart.destroy();
-        chart = null;
-    }
-    
-    console.log("Selection cleared");
 }
 
-// Load connected devices/agents
-async function loadDevices() {
+// Determine health status and color
+function getHealthStatus(cpu, memory, disk) {
+    const maxMetric = Math.max(cpu, memory, disk);
+    
+    if (maxMetric > THRESHOLDS.CRITICAL) {
+        return { status: 'danger', color: 'red' };
+    } else if (maxMetric > THRESHOLDS.WARNING) {
+        return { status: 'moderate', color: 'yellow' };
+    } else {
+        return { status: 'good', color: 'green' };
+    }
+}
+
+// Update device list with health indicators
+async function updateDeviceList() {
     try {
-        const response = await fetch("/api/agents");
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+        const response = await fetch('/api/agents');
+        if (!response.ok) throw new Error('Failed to fetch agents');
         
         const agents = await response.json();
-        const deviceList = document.getElementById("device-list");
+        const deviceList = document.getElementById('device-list');
+        const deviceCount = document.getElementById('device-count');
         
-        if (!deviceList) return;
-        
-        // Clear current list
-        deviceList.innerHTML = "";
-        
-        if (agents.length === 0) {
+        if (!agents || agents.length === 0) {
             deviceList.innerHTML = `
                 <li class="no-agents">
-                    <i>No devices connected</i><br>
+                    <i class="fas fa-satellite-dish"></i>
+                    <p>No devices connected</p>
                     <small>Start an agent to see devices here</small>
                 </li>
             `;
+            deviceCount.textContent = '0';
             return;
         }
         
-        // Add each agent to the list
+        // Update device count
+        deviceCount.textContent = agents.length;
+        
+        // Sort agents by health status (danger first)
+        agents.sort((a, b) => {
+            const healthA = getHealthStatus(a.cpu, a.memory, a.disk);
+            const healthB = getHealthStatus(b.cpu, b.memory, b.disk);
+            const priority = { danger: 3, moderate: 2, good: 1 };
+            return priority[healthB.status] - priority[healthA.status];
+        });
+        
+        let html = '';
         agents.forEach(agent => {
-            const li = document.createElement("li");
-            li.className = "device-item";
-            li.setAttribute("data-agent-id", agent.agent_id);
+            const health = getHealthStatus(agent.cpu, agent.memory, agent.disk);
+            const lastUpdate = formatTimeFull(agent.timestamp);
             
-            // Determine status color
-            let statusClass = "status-online";
-            let statusText = "Online";
+            // Cache health for alerts
+            const previousHealth = agentHealthCache[agent.agent_id];
+            agentHealthCache[agent.agent_id] = health.status;
             
-            // Create status indicator
-            const statusIndicator = document.createElement("span");
-            statusIndicator.className = `status-indicator ${statusClass}`;
-            statusIndicator.title = statusText;
+            // Check for health status change
+            if (previousHealth && previousHealth !== health.status) {
+                showNotification(`Device ${agent.agent_id} health changed to ${health.status}`, 
+                               health.status === 'danger' ? 'danger' : 
+                               health.status === 'moderate' ? 'warning' : 'success');
+            }
             
-            // Create agent info
-            const agentInfo = document.createElement("div");
-            agentInfo.className = "agent-info";
-            
-            agentInfo.innerHTML = `
-                <div class="agent-name">${agent.agent_id}</div>
-                <div class="agent-metrics">
-                    <span class="metric cpu">CPU: ${agent.cpu.toFixed(1)}%</span>
-                    <span class="metric memory">RAM: ${agent.memory.toFixed(1)}%</span>
-                    <span class="metric disk">Disk: ${agent.disk.toFixed(1)}%</span>
-                </div>
-                <div class="agent-time">Last: ${formatTimestamp(agent.timestamp)}</div>
+            html += `
+                <li class="device-item ${selectedAgent === agent.agent_id ? 'active' : ''}" 
+                    data-agent-id="${agent.agent_id}"
+                    data-cpu="${agent.cpu}"
+                    data-memory="${agent.memory}"
+                    data-disk="${agent.disk}">
+                    <div class="device-status">
+                        <span class="status-dot ${health.color}"></span>
+                        <span class="agent-name">${agent.agent_id}</span>
+                    </div>
+                    <div class="device-metrics">
+                        <span class="metric cpu" title="CPU: ${agent.cpu}%">${Math.round(agent.cpu)}%</span>
+                        <span class="metric memory" title="Memory: ${agent.memory}%">${Math.round(agent.memory)}%</span>
+                        <span class="metric disk" title="Disk: ${agent.disk}%">${Math.round(agent.disk)}%</span>
+                    </div>
+                    <div class="device-time">
+                        <small>${lastUpdate}</small>
+                    </div>
+                </li>
             `;
-            
-            li.appendChild(statusIndicator);
-            li.appendChild(agentInfo);
-            
-            // Add click event
-            li.addEventListener("click", () => {
-                // Remove active class from all items
-                document.querySelectorAll(".device-item").forEach(item => {
-                    item.classList.remove("active");
-                });
-                
-                // Add active class to clicked item
-                li.classList.add("active");
-                
-                // Load history for this agent
-                loadHistory(agent.agent_id);
+        });
+        
+        deviceList.innerHTML = html;
+        
+        // Add click handlers to device items
+        document.querySelectorAll('.device-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const agentId = this.getAttribute('data-agent-id');
+                selectDevice(agentId);
             });
-            
-            deviceList.appendChild(li);
         });
         
     } catch (error) {
-        console.error("Error loading devices:", error);
-        const deviceList = document.getElementById("device-list");
-        if (deviceList) {
-            deviceList.innerHTML = `
-                <li class="error">
-                    <span class="error-icon">⚠</span>
-                    Error loading devices: ${error.message}
-                </li>
-            `;
-        }
+        console.error('Error updating device list:', error);
     }
 }
 
-// Load history for selected agent
-async function loadHistory(agentId) {
-    if (!agentId) return;
+// Select device and load its data
+async function selectDevice(agentId) {
+    if (selectedAgent === agentId) return;
     
     selectedAgent = agentId;
     
+    // Update active state
+    document.querySelectorAll('.device-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-agent-id') === agentId) {
+            item.classList.add('active');
+        }
+    });
+    
+    // Show loading state
+    const chartContainer = document.getElementById('chart-container');
+    const welcomeDiv = document.getElementById('welcome');
+    if (chartContainer && welcomeDiv) {
+        welcomeDiv.classList.add('hidden');
+        chartContainer.classList.remove('hidden');
+    }
+    
+    // Update selected agent name
+    const selectedName = document.getElementById('selected-agent-name');
+    if (selectedName) {
+        selectedName.textContent = agentId;
+    }
+    
+    // Clear existing interval
+    if (updateInterval) {
+        clearInterval(updateInterval);
+    }
+    
+    // Load initial data
+    await loadHistory(agentId);
+    
+    // Start periodic updates every 10 seconds
+    updateInterval = setInterval(() => {
+        loadHistory(agentId);
+    }, 10000);
+}
+
+// Load history with smooth chart updates
+async function loadHistory(agentId) {
+    if (!agentId) return;
+    
     try {
         const response = await fetch(`/api/reports/history/${agentId}`);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error('Failed to fetch history');
         
         const historyData = await response.json();
         
-        // Show/hide welcome message
-        const welcomeDiv = document.getElementById("welcome");
-        const chartContainer = document.getElementById("chart-container");
-        
         if (!historyData || historyData.length === 0) {
-            if (welcomeDiv) welcomeDiv.classList.remove("hidden");
-            if (chartContainer) chartContainer.classList.add("hidden");
-            
-            // Update welcome message
-            if (welcomeDiv) {
-                welcomeDiv.innerHTML = `
-                    <h1>No Data Available</h1>
-                    <p>No metrics found for <strong>${agentId}</strong>.</p>
-                    <p>Start sending reports to see data here.</p>
-                `;
-            }
+            showNotification(`No data available for ${agentId}`, 'warning');
             return;
         }
         
-        // Hide welcome, show chart
-        if (welcomeDiv) welcomeDiv.classList.add("hidden");
-        if (chartContainer) chartContainer.classList.remove("hidden");
+        // Update metrics summary
+        updateMetricsSummary(historyData[historyData.length - 1]);
         
-        // Prepare chart data (reverse for chronological order)
+        // Prepare chart data (oldest first for chronological order)
         const reversedData = [...historyData].reverse();
         
-        // Extract data for chart
         const labels = reversedData.map(d => formatTimestamp(d.timestamp));
         const cpuData = reversedData.map(d => d.cpu_percent);
         const memoryData = reversedData.map(d => d.memory_percent);
         const diskData = reversedData.map(d => d.disk_percent);
         
-        // Get chart canvas
-        const ctx = document.getElementById("metricsChart").getContext("2d");
+        // Get chart context
+        const ctx = document.getElementById('metricsChart').getContext('2d');
         
-        // Initialize visibility for this agent if not exists
-        if (!chartVisibility[agentId]) {
-            chartVisibility[agentId] = {
-                'CPU Usage %': false,
-                'Memory Usage %': false,
-                'Disk Usage %': false
-            };
-        }
-        
-        // Get current visibility if chart exists
+        // Update or create chart
         if (chart) {
-            try {
-                // Store current visibility state before destroying
-                if (chart.data && chart.data.datasets) {
-                    for (let i = 0; i < chart.data.datasets.length; i++) {
-                        const dataset = chart.data.datasets[i];
-                        const meta = chart.getDatasetMeta(i);
-                        if (dataset.label && meta) {
-                            chartVisibility[agentId][dataset.label] = meta.hidden === true;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log("Error getting visibility:", e);
-            }
+            // Smooth update existing chart
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = cpuData;
+            chart.data.datasets[1].data = memoryData;
+            chart.data.datasets[2].data = diskData;
             
-            // Destroy existing chart
-            chart.destroy();
-        }
-        
-        // Create new chart
-        chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'CPU Usage %',
-                        data: cpuData,
-                        borderColor: '#ff6384',
-                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        hidden: chartVisibility[agentId]['CPU Usage %'] || false
-                    },
-                    {
-                        label: 'Memory Usage %',
-                        data: memoryData,
-                        borderColor: '#36a2eb',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        hidden: chartVisibility[agentId]['Memory Usage %'] || false
-                    },
-                    {
-                        label: 'Disk Usage %',
-                        data: diskData,
-                        borderColor: '#4bc0c0',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        hidden: chartVisibility[agentId]['Disk Usage %'] || false
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: `Live Metrics - ${agentId}`,
-                        font: {
-                            size: 18,
-                            weight: 'bold'
+            // Update with animation
+            chart.update('active');
+        } else {
+            // Create new chart
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'CPU Usage %',
+                            data: cpuData,
+                            borderColor: '#FF6384',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointBackgroundColor: '#FF6384',
+                            cubicInterpolationMode: 'monotone'
                         },
-                        color: '#2c3e50'
+                        {
+                            label: 'Memory Usage %',
+                            data: memoryData,
+                            borderColor: '#36A2EB',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointBackgroundColor: '#36A2EB',
+                            cubicInterpolationMode: 'monotone'
+                        },
+                        {
+                            label: 'Disk Usage %',
+                            data: diskData,
+                            borderColor: '#4BC0C0',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointBackgroundColor: '#4BC0C0',
+                            cubicInterpolationMode: 'monotone'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
                     },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: {
-                            title: function(tooltipItems) {
-                                const index = tooltipItems[0].dataIndex;
-                                return formatDate(reversedData[index].timestamp);
+                    transitions: {
+                        active: {
+                            animation: {
+                                duration: 1000,
+                                easing: 'easeInOutQuart'
                             }
                         }
                     },
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            font: {
-                                size: 12
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                font: {
+                                    size: 12
+                                },
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            titleColor: 'rgba(255, 255, 255, 0.9)',
+                            bodyColor: 'rgba(255, 255, 255, 0.8)',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label = label.split(' ')[0] + ': ';
+                                    }
+                                    label += context.parsed.y.toFixed(1) + '%';
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                borderColor: 'rgba(255, 255, 255, 0.1)'
                             },
-                            padding: 20,
-                            usePointStyle: true
-                        },
-                        onClick: function(evt, legendItem, legend) {
-                            // Update visibility state in our storage
-                            const index = legendItem.datasetIndex;
-                            const label = legend.chart.data.datasets[index].label;
-                            
-                            // Toggle visibility
-                            const meta = legend.chart.getDatasetMeta(index);
-                            meta.hidden = meta.hidden === null ? !legend.chart.data.datasets[index].hidden : null;
-                            
-                            // Store in our visibility object
-                            chartVisibility[agentId][label] = meta.hidden === true;
-                            
-                            // Update the chart
-                            legend.chart.update();
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Time (IST)',
-                            font: {
-                                size: 12,
-                                weight: 'bold'
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                maxTicksLimit: 10
                             }
                         },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                borderColor: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
                         }
                     },
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: {
-                            display: true,
-                            text: 'Usage Percentage (%)',
-                            font: {
-                                size: 12,
-                                weight: 'bold'
-                            }
+                    elements: {
+                        line: {
+                            tension: 0.4
                         },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
-                        },
-                        ticks: {
-                            callback: function(value) {
-                                return value + '%';
-                            }
+                        point: {
+                            radius: 0,
+                            hoverRadius: 6
                         }
                     }
-                },
-                interaction: {
-                    intersect: false,
-                    mode: 'nearest'
-                },
-                animation: {
-                    duration: 750
                 }
-            }
-        });
-        
-        // Update chart title with agent name
-        const chartTitle = document.querySelector('.chart-title');
-        if (chartTitle) {
-            chartTitle.textContent = `Live Metrics - ${agentId}`;
+            });
         }
+        
+        // Update live feed
+        updateLiveFeed(agentId, historyData[historyData.length - 1]);
+        
+        // Check for alerts
+        checkAlerts(historyData[historyData.length - 1]);
         
     } catch (error) {
         console.error(`Error loading history for ${agentId}:`, error);
-        
-        // Show error in welcome div
-        const welcomeDiv = document.getElementById("welcome");
-        if (welcomeDiv) {
-            welcomeDiv.classList.remove("hidden");
-            welcomeDiv.innerHTML = `
-                <h1>Error Loading Data</h1>
-                <p>Could not load metrics for <strong>${agentId}</strong>.</p>
-                <p style="color: #e74c3c;">Error: ${error.message}</p>
-            `;
-        }
-        
-        const chartContainer = document.getElementById("chart-container");
-        if (chartContainer) {
-            chartContainer.classList.add("hidden");
+        showNotification(`Error loading data for ${agentId}`, 'danger');
+    }
+}
+
+// Update metrics summary cards
+function updateMetricsSummary(latestData) {
+    if (!latestData) return;
+    
+    // CPU
+    const cpuValue = document.getElementById('cpu-value');
+    if (cpuValue) {
+        cpuValue.textContent = `${latestData.cpu_percent.toFixed(1)}%`;
+        updateMetricColor('cpu', latestData.cpu_percent);
+    }
+    updateMetricTrend('cpu', latestData.cpu_percent);
+    
+    // Memory
+    const memoryValue = document.getElementById('memory-value');
+    if (memoryValue) {
+        memoryValue.textContent = `${latestData.memory_percent.toFixed(1)}%`;
+        updateMetricColor('memory', latestData.memory_percent);
+    }
+    updateMetricTrend('memory', latestData.memory_percent);
+    
+    // Disk
+    const diskValue = document.getElementById('disk-value');
+    if (diskValue) {
+        diskValue.textContent = `${latestData.disk_percent.toFixed(1)}%`;
+        updateMetricColor('disk', latestData.disk_percent);
+    }
+    updateMetricTrend('disk', latestData.disk_percent);
+}
+
+// Update metric trend indicator
+function updateMetricTrend(metric, value) {
+    const trendElement = document.getElementById(`${metric}-trend`);
+    const iconElement = document.getElementById(`${metric}-trend-icon`);
+    
+    if (!trendElement || !iconElement) return;
+    
+    // Simulated trend (in real app, compare with previous value)
+    const trend = Math.random() > 0.5 ? 1 : -1;
+    const change = (Math.random() * 5).toFixed(1);
+    
+    trendElement.textContent = `${trend > 0 ? '+' : ''}${change}%`;
+    if (trend > 0) {
+        iconElement.className = 'fas fa-arrow-up';
+        iconElement.style.color = '#ef4444';
+    } else {
+        iconElement.className = 'fas fa-arrow-down';
+        iconElement.style.color = '#10b981';
+    }
+}
+
+// Update metric card color based on value
+function updateMetricColor(metric, value) {
+    const card = document.querySelector(`.${metric}-card .metric-value`);
+    if (card) {
+        if (value > THRESHOLDS.CRITICAL) {
+            card.style.color = '#ef4444';
+        } else if (value > THRESHOLDS.WARNING) {
+            card.style.color = '#f59e0b';
+        } else {
+            card.style.color = '#10b981';
         }
     }
 }
 
-// Toggle auto-refresh
-function toggleAutoRefresh() {
-    autoRefresh = !autoRefresh;
-    const toggleBtn = document.getElementById("refresh-toggle");
+// Check for alerts
+function checkAlerts(latestData) {
+    if (!latestData) return;
     
-    if (toggleBtn) {
-        toggleBtn.textContent = autoRefresh ? "⏸ Pause" : "▶ Resume";
-        toggleBtn.title = autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh";
+    const metrics = [
+        { name: 'CPU', value: latestData.cpu_percent, threshold: THRESHOLDS.CRITICAL },
+        { name: 'Memory', value: latestData.memory_percent, threshold: THRESHOLDS.CRITICAL },
+        { name: 'Disk', value: latestData.disk_percent, threshold: THRESHOLDS.CRITICAL }
+    ];
+    
+    metrics.forEach(metric => {
+        if (metric.value > metric.threshold) {
+            showNotification(`${metric.name} usage critical: ${metric.value.toFixed(1)}%`, 'danger');
+        } else if (metric.value > THRESHOLDS.WARNING) {
+            showNotification(`${metric.name} usage high: ${metric.value.toFixed(1)}%`, 'warning');
+        }
+    });
+}
+
+// Update live feed
+function updateLiveFeed(agentId, data) {
+    const feedContent = document.getElementById('live-feed-content');
+    if (!feedContent) return;
+    
+    const time = new Date().toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    
+    const feedItem = `
+        <div class="feed-item">
+            <span class="feed-time">${time}</span>
+            <span class="feed-text">${agentId}: CPU ${data.cpu_percent.toFixed(1)}%, 
+            RAM ${data.memory_percent.toFixed(1)}%, 
+            Disk ${data.disk_percent.toFixed(1)}%</span>
+        </div>
+    `;
+    
+    // Add new feed item
+    feedContent.insertAdjacentHTML('afterbegin', feedItem);
+    
+    // Keep only last 5 items
+    const items = feedContent.querySelectorAll('.feed-item');
+    if (items.length > 5) {
+        items[5].remove();
     }
-    
-    console.log(`Auto-refresh ${autoRefresh ? 'enabled' : 'disabled'}`);
 }
 
 // Initialize dashboard
 function initDashboard() {
-    console.log("Initializing dashboard...");
+    console.log('Initializing dashboard...');
     
-    // Load devices immediately
-    loadDevices();
+    // Update device list immediately
+    updateDeviceList();
     
-    // Set up auto-refresh for devices (every 3 seconds)
-    setInterval(() => {
-        if (autoRefresh) {
-            loadDevices();
-        }
-    }, 3000);
+    // Start periodic device list updates (every 5 seconds)
+    deviceListInterval = setInterval(updateDeviceList, 5000);
     
-    // Set up auto-refresh for selected agent (every 5 seconds)
-    setInterval(() => {
-        if (autoRefresh && selectedAgent) {
-            loadHistory(selectedAgent);
-        }
-    }, 5000);
-    
-    // Add refresh toggle button if not exists
-    if (!document.getElementById("refresh-toggle")) {
-        const sidebar = document.querySelector(".sidebar h2");
-        if (sidebar) {
-            const toggleBtn = document.createElement("button");
-            toggleBtn.id = "refresh-toggle";
-            toggleBtn.textContent = "⏸ Pause";
-            toggleBtn.title = "Pause auto-refresh";
-            toggleBtn.className = "refresh-toggle";
-            toggleBtn.addEventListener("click", toggleAutoRefresh);
-            
-            sidebar.insertAdjacentElement("afterend", toggleBtn);
-        }
+    // Add event listeners
+    const refreshBtn = document.getElementById('refresh-chart');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            if (selectedAgent) {
+                loadHistory(selectedAgent);
+                showNotification('Chart refreshed', 'info');
+            }
+        });
     }
     
-    // Add server status check
-    checkServerStatus();
-    
-    // Add click to welcome screen to clear selection
-    const welcomeDiv = document.getElementById("welcome");
-    if (welcomeDiv) {
-        welcomeDiv.addEventListener("click", clearSelection);
+    const exportBtn = document.getElementById('export-chart');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            if (chart) {
+                const link = document.createElement('a');
+                link.download = `metrics-${selectedAgent || 'dashboard'}.png`;
+                link.href = chart.toBase64Image();
+                link.click();
+                showNotification('Chart exported', 'success');
+            }
+        });
     }
+    
+    const refreshDevicesBtn = document.getElementById('refresh-devices');
+    if (refreshDevicesBtn) {
+        refreshDevicesBtn.addEventListener('click', () => {
+            updateDeviceList();
+            showNotification('Device list refreshed', 'info');
+        });
+    }
+    
+    // Handle window close
+    window.addEventListener('beforeunload', () => {
+        if (updateInterval) clearInterval(updateInterval);
+        if (deviceListInterval) clearInterval(deviceListInterval);
+    });
 }
 
-// Check server status
-async function checkServerStatus() {
-    try {
-        const response = await fetch("/api/server/info");
-        if (response.ok) {
-            const data = await response.json();
-            console.log("Server status:", data);
-        }
-    } catch (error) {
-        console.warn("Server status check failed:", error);
-    }
-}
+// Export functions for global access
+window.updateDeviceList = updateDeviceList;
+window.selectDevice = selectDevice;
+window.loadHistory = loadHistory;
 
 // Initialize when DOM is loaded
-document.addEventListener("DOMContentLoaded", initDashboard);
-
-// Export functions for debugging
-window.dashboard = {
-    loadDevices,
-    loadHistory,
-    toggleAutoRefresh,
-    formatTimestamp,
-    clearSelection
-};
+document.addEventListener('DOMContentLoaded', initDashboard);

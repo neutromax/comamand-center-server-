@@ -64,6 +64,16 @@ def serve_static(filename):
 def dashboard():
     return render_template("dashboard.html")
 
+# Test endpoint
+@app.route("/test")
+def test_connection():
+    """Test endpoint to verify server is working"""
+    return jsonify({
+        "status": "ok",
+        "message": "Server is running",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
 # API: Receive report from agent
 @app.route("/api/report", methods=["POST"])
 def receive_report():
@@ -144,12 +154,12 @@ def get_agents():
 @app.route("/api/reports/history/<string:agent_id>")
 def report_history(agent_id):
     try:
-        # Get last 20 reports for the agent
+        # Get last 50 reports for the agent (for smooth chart updates)
         reports = (
             Report.query
             .filter_by(agent_id=agent_id)
             .order_by(Report.timestamp.desc())
-            .limit(20)
+            .limit(50)
             .all()
         )
         
@@ -171,6 +181,32 @@ def report_history(agent_id):
     except Exception as e:
         print(f"Error getting history for {agent_id}: {e}")
         return jsonify([])
+
+# API: Get latest data for specific agent
+@app.route("/api/agent/<string:agent_id>/latest")
+def get_agent_latest(agent_id):
+    try:
+        latest_report = (
+            Report.query
+            .filter_by(agent_id=agent_id)
+            .order_by(Report.timestamp.desc())
+            .first()
+        )
+        
+        if not latest_report:
+            return jsonify({"error": "No data found"}), 404
+            
+        ist_time = utc_to_ist(latest_report.timestamp)
+        return jsonify({
+            "agent_id": latest_report.agent_id,
+            "cpu": round(latest_report.cpu, 2),
+            "memory": round(latest_report.memory, 2),
+            "disk": round(latest_report.disk, 2),
+            "timestamp": to_iso_with_timezone(ist_time)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # API: Clear database (for testing)
 @app.route("/api/debug/clear", methods=["POST"])
@@ -197,27 +233,39 @@ def add_sample_data():
         # Clear existing sample data
         Report.query.filter_by(agent_id=agent_id).delete()
         
-        # Add 20 sample reports
-        for i in range(20):
+        # Add 50 sample reports for smooth chart
+        for i in range(50):
             report = Report(
                 agent_id=agent_id,
-                cpu=random.uniform(20, 80),
-                memory=random.uniform(30, 70),
-                disk=random.uniform(40, 90),
-                timestamp=now - timedelta(minutes=(19 - i) * 5)  # 95 minutes span
+                cpu=random.uniform(20, 90),
+                memory=random.uniform(30, 85),
+                disk=random.uniform(40, 95),
+                timestamp=now - timedelta(seconds=(49 - i) * 10)  # 8 minutes span, 10 sec intervals
             )
             db.session.add(report)
         
         db.session.commit()
         return jsonify({
             "status": "ok", 
-            "message": f"Added 20 sample reports for {agent_id}"
+            "message": f"Added 50 sample reports for {agent_id}"
         })
         
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# API: Get server info
+# Download agent file
+@app.route("/download/agent")
+def download_agent():
+    agent_path = os.path.join(
+        os.path.dirname(BASE_DIR),  # project root
+        "agent"
+    )
+    return send_from_directory(
+        agent_path,
+        "agent.py",
+        as_attachment=True
+    )
+
 @app.route("/api/server/info")
 def server_info():
     """Get server information"""
@@ -252,4 +300,4 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop")
     print("=" * 60 + "\n")
     
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
