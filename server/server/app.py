@@ -21,16 +21,8 @@ app = Flask(
 CORS(app)
 
 # Database configuration
-database_url = os.environ.get("DATABASE_URL")
-
-if database_url:
-    print("Using production database")
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-else:
-    print("Using local SQLite database")
-    DATABASE_PATH = os.path.join(BASE_DIR, "monitoring.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"
-
+DATABASE_PATH = os.path.join(BASE_DIR, "monitoring.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
@@ -308,5 +300,4 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop")
     print("=" * 60 + "\n")
     
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
