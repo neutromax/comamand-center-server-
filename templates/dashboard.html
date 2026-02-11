@@ -68,7 +68,7 @@
                             <span class="step-label">Step 2: copy and paste 
                                 in terminal</span>
                             <div class="command-box">
-                                <code id="command-code">python agent.py --server http://127.0.0.1:5000</code>
+                                <code id="command-code">python agent.py --server {{ request.host_url.rstrip('/') }}</code>
                                 <button class="copy-btn-sidebar" onclick="copyCommand()" title="Copy command">
                                     <i class="fas fa-copy"></i>
                                 </button>
