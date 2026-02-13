@@ -2,9 +2,11 @@ import os
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from models import db, Report
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone                                            
 from sqlalchemy import func, and_
 import pytz
+
+
 
 # Get project root directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -154,20 +156,22 @@ def get_agents():
 @app.route("/api/reports/history/<string:agent_id>")
 def report_history(agent_id):
     try:
-        range_value = request.args.get("range", "30m")
+        range_value = int(request.args.get("range", 30))
+        time_threshold = datetime.utcnow() - timedelta(minutes=range_value)
         print("Range requested:", range_value)
 
         # Get last 50 reports for the agent (for smooth chart updates)
         reports = (
             Report.query
-            .filter_by(agent_id=agent_id)
-            .order_by(Report.timestamp.desc())
-            .limit(50)
+            .filter(Report.agent_id == agent_id)
+            .filter(Report.timestamp >= time_threshold)
+            .order_by(Report.timestamp.asc())
             .all()
         )
+
         
         # Prepare response with IST time (oldest first for chart)
-        reports.reverse()
+        
         history_data = []
         
         for report in reports:

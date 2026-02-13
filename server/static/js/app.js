@@ -5,13 +5,17 @@ let chartVisibility = {};
 let agentHealthCache = {};
 let updateInterval = null;
 let deviceListInterval = null;
+// Alert cooldown system
+const alertCooldowns = {};
+const ALERT_COOLDOWN_TIME = 5 * 60 * 1000; // 5 minutes
+
 
 // Health thresholds
 const THRESHOLDS = {
     CRITICAL: 80,  // Red: >80%
     WARNING: 60,   // Yellow: 60-80%
     GOOD: 60       // Green: <60%
-};
+};                                               
 
 // Format timestamp for display
 function formatTimestamp(timestamp) {
@@ -423,6 +427,21 @@ function updateMetricColor(metric, value) {
         }
     }
 }
+function canShowAlert(key) {
+    const now = Date.now();
+
+    if (!alertCooldowns[key]) {
+        alertCooldowns[key] = now;
+        return true;
+    }
+
+    if (now - alertCooldowns[key] > ALERT_COOLDOWN_TIME) {
+        alertCooldowns[key] = now;
+        return true;
+    }
+
+    return false;
+}
 
 // Check for alerts
 function checkAlerts(latestData) {
@@ -435,12 +454,20 @@ function checkAlerts(latestData) {
     ];
     
     metrics.forEach(metric => {
-        if (metric.value > metric.threshold) {
+    const key = `${selectedAgent}-${metric.name}`;
+
+    if (metric.value > metric.threshold) {
+        if (canShowAlert(key)) {
             showNotification(`${metric.name} usage critical: ${metric.value.toFixed(1)}%`, 'danger');
-        } else if (metric.value > THRESHOLDS.WARNING) {
+        }
+    } 
+    else if (metric.value > THRESHOLDS.WARNING) {
+        if (canShowAlert(key)) {
             showNotification(`${metric.name} usage high: ${metric.value.toFixed(1)}%`, 'warning');
         }
-    });
+    }
+});
+
 }
 
 // Update live feed
