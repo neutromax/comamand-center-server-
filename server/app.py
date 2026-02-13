@@ -154,6 +154,9 @@ def get_agents():
 @app.route("/api/reports/history/<string:agent_id>")
 def report_history(agent_id):
     try:
+        range_value = request.args.get("range", "30m")
+        print("Range requested:", range_value)
+
         # Get last 50 reports for the agent (for smooth chart updates)
         reports = (
             Report.query

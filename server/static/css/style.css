@@ -1307,8 +1307,9 @@ body {
     border-radius: 12px;
     padding: 12px 15px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    overflow-x: auto;
-    white-space: nowrap;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-all;
     min-height: 50px;
 }
 
@@ -1317,9 +1318,8 @@ body {
     font-family: 'Courier New', monospace;
     font-size: 13px;
     color: var(--accent);
-    white-space: nowrap;
-    overflow-x: auto;
-    text-overflow: ellipsis;
+    white-space: normal;
+    word-break: break-all;
     padding: 5px 0;
     min-width: 0;
 }
@@ -1342,4 +1342,14 @@ body {
 .command-box::-webkit-scrollbar-thumb:hover {
     background: var(--secondary);
 }
+}
+/* FINAL FIX – FORCE WRAP */
+.command-box {
+    overflow-x: hidden !important;
+    white-space: normal !important;
+}
+
+.command-box code {
+    white-space: normal !important;
+    word-break: break-all !important;
 }

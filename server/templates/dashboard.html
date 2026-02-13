@@ -410,6 +410,16 @@
                     }
                 });
             }
+            const timeSelect = document.getElementById("time-range-select");
+
+if (timeSelect) {
+    timeSelect.addEventListener("change", () => {
+        if (window.currentAgentId) {
+            loadHistory(window.currentAgentId);
+        }
+    });
+}
+
             
             // Add CSS animations dynamically
             const style = document.createElement('style');

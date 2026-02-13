@@ -177,7 +177,9 @@ async function loadHistory(agentId) {
     if (!agentId) return;
     
     try {
-        const response = await fetch(`/api/reports/history/${agentId}`);
+        const range = document.getElementById("time-range-select")?.value || "30m";
+        const response = await fetch(`/api/reports/history/${agentId}?range=${range}`);
+
         if (!response.ok) throw new Error('Failed to fetch history');
         
         const historyData = await response.json();
