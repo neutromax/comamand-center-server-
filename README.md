@@ -144,7 +144,7 @@ server/
 ![Home Page](screenshots/home.png)
 
 ### Dashboard
-![Dashboard](screenshots/home.png)
+![Dashboard](screenshots/dashboard.png)
 
 ---
 
