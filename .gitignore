@@ -1,3 +1,36 @@
+# Database files
 *.db
+*.sqlite
+*.sqlite3
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
 .env
+.venv/
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Instance folder
+instance/
+server/instance/

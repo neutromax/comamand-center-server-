@@ -3,11 +3,20 @@ let chart = null;
 let selectedAgent = null;
 let chartVisibility = {};
 let agentHealthCache = {};
+let previousMetrics = {}; // Track previous values for real trend calculation
 let updateInterval = null;
 let deviceListInterval = null;
 // Alert cooldown system
 const alertCooldowns = {};
 const ALERT_COOLDOWN_TIME = 5 * 60 * 1000; // 5 minutes
+
+// XSS Prevention: escape HTML entities in user-supplied strings
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(str)));
+    return div.innerHTML;
+}
 
 
 // Health thresholds
@@ -49,6 +58,7 @@ function getHealthStatus(cpu, memory, disk) {
 }
 
 // Update device list with health indicators
+// Update device list with health indicators
 async function updateDeviceList() {
     try {
         const response = await fetch('/api/agents');
@@ -81,8 +91,34 @@ async function updateDeviceList() {
             return priority[healthB.status] - priority[healthA.status];
         });
         
+        // Get search filter query
+        const searchInput = document.getElementById('device-search');
+        const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        
+        // Filter agents by search query (name or health status)
+        const filteredAgents = agents.filter(agent => {
+            const agentId = agent.agent_id.toLowerCase();
+            const status = getHealthStatus(agent.cpu, agent.memory, agent.disk).status;
+            return agentId.includes(searchQuery) || status.includes(searchQuery);
+        });
+        
+        if (filteredAgents.length === 0) {
+            deviceList.innerHTML = `
+                <li class="no-agents">
+                    <i class="fas fa-search"></i>
+                    <p>No matching devices</p>
+                    <small>Try a different search term</small>
+                </li>
+            `;
+            return;
+        }
+        
+        // Save scroll position
+        const scrollContainer = document.querySelector('.devices-scroll');
+        const prevScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+        
         let html = '';
-        agents.forEach(agent => {
+        filteredAgents.forEach(agent => {
             const health = getHealthStatus(agent.cpu, agent.memory, agent.disk);
             const lastUpdate = formatTimeFull(agent.timestamp);
             
@@ -90,27 +126,41 @@ async function updateDeviceList() {
             const previousHealth = agentHealthCache[agent.agent_id];
             agentHealthCache[agent.agent_id] = health.status;
             
-            // Check for health status change
+            // Check for health status change (rate-limited and filtered to prevent spam at scale)
             if (previousHealth && previousHealth !== health.status) {
-                showNotification(`Device ${agent.agent_id} health changed to ${health.status}`, 
-                               health.status === 'danger' ? 'danger' : 
-                               health.status === 'moderate' ? 'warning' : 'success');
+                const isSelected = (agent.agent_id === selectedAgent);
+                const isDangerTransition = (health.status === 'danger');
+                
+                if (isSelected || isDangerTransition) {
+                    const cooldownKey = `toast-health-${agent.agent_id}-${health.status}`;
+                    if (canShowAlert(cooldownKey)) {
+                        showNotification(`Device ${escapeHtml(agent.agent_id)} health changed to ${health.status}`, 
+                                       health.status === 'danger' ? 'danger' : 
+                                       health.status === 'moderate' ? 'warning' : 'success');
+                    }
+                }
             }
+            
+            // XSS Prevention: escape agent_id before rendering into HTML
+            const safeAgentId = escapeHtml(agent.agent_id);
+            const safeCpu = Number(agent.cpu) || 0;
+            const safeMemory = Number(agent.memory) || 0;
+            const safeDisk = Number(agent.disk) || 0;
             
             html += `
                 <li class="device-item ${selectedAgent === agent.agent_id ? 'active' : ''}" 
-                    data-agent-id="${agent.agent_id}"
-                    data-cpu="${agent.cpu}"
-                    data-memory="${agent.memory}"
-                    data-disk="${agent.disk}">
+                    data-agent-id="${safeAgentId}"
+                    data-cpu="${safeCpu}"
+                    data-memory="${safeMemory}"
+                    data-disk="${safeDisk}">
                     <div class="device-status">
                         <span class="status-dot ${health.color}"></span>
-                        <span class="agent-name">${agent.agent_id}</span>
+                        <span class="agent-name">${safeAgentId}</span>
                     </div>
                     <div class="device-metrics">
-                        <span class="metric cpu" title="CPU: ${agent.cpu}%">${Math.round(agent.cpu)}%</span>
-                        <span class="metric memory" title="Memory: ${agent.memory}%">${Math.round(agent.memory)}%</span>
-                        <span class="metric disk" title="Disk: ${agent.disk}%">${Math.round(agent.disk)}%</span>
+                        <span class="metric cpu" title="CPU: ${safeCpu}%">${Math.round(safeCpu)}%</span>
+                        <span class="metric memory" title="Memory: ${safeMemory}%">${Math.round(safeMemory)}%</span>
+                        <span class="metric disk" title="Disk: ${safeDisk}%">${Math.round(safeDisk)}%</span>
                     </div>
                     <div class="device-time">
                         <small>${lastUpdate}</small>
@@ -120,6 +170,11 @@ async function updateDeviceList() {
         });
         
         deviceList.innerHTML = html;
+        
+        // Restore scroll position
+        if (scrollContainer) {
+            scrollContainer.scrollTop = prevScrollTop;
+        }
         
         // Add click handlers to device items
         document.querySelectorAll('.device-item').forEach(item => {
@@ -139,6 +194,7 @@ async function selectDevice(agentId) {
     if (selectedAgent === agentId) return;
     
     selectedAgent = agentId;
+    window.currentAgentId = agentId; // Synchronize with inline scripts
     
     // Update active state
     document.querySelectorAll('.device-item').forEach(item => {
@@ -174,6 +230,19 @@ async function selectDevice(agentId) {
     updateInterval = setInterval(() => {
         loadHistory(agentId);
     }, 10000);
+    
+    // Load active tab data
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+        const onclickAttr = activeTab.getAttribute('onclick') || '';
+        if (onclickAttr.includes('processes-tab')) {
+            dispatchProcessList();
+        } else if (onclickAttr.includes('thresholds-tab')) {
+            loadDeviceThresholds();
+        } else if (onclickAttr.includes('incidents-tab')) {
+            loadIncidentsHistory();
+        }
+    }
 }
 
 // Load history with smooth chart updates
@@ -393,24 +462,37 @@ function updateMetricsSummary(latestData) {
     updateMetricTrend('disk', latestData.disk_percent);
 }
 
-// Update metric trend indicator
+// Update metric trend indicator using real data comparison
 function updateMetricTrend(metric, value) {
     const trendElement = document.getElementById(`${metric}-trend`);
     const iconElement = document.getElementById(`${metric}-trend-icon`);
     
     if (!trendElement || !iconElement) return;
     
-    // Simulated trend (in real app, compare with previous value)
-    const trend = Math.random() > 0.5 ? 1 : -1;
-    const change = (Math.random() * 5).toFixed(1);
+    // Compare with previous value for real trend
+    const prevValue = previousMetrics[metric];
+    previousMetrics[metric] = value;
     
-    trendElement.textContent = `${trend > 0 ? '+' : ''}${change}%`;
+    if (prevValue === undefined || prevValue === null) {
+        trendElement.textContent = '--';
+        iconElement.className = 'fas fa-minus';
+        iconElement.style.color = 'rgba(255,255,255,0.5)';
+        return;
+    }
+    
+    const change = (value - prevValue).toFixed(1);
+    const trend = value - prevValue;
+    
+    trendElement.textContent = `${trend >= 0 ? '+' : ''}${change}%`;
     if (trend > 0) {
         iconElement.className = 'fas fa-arrow-up';
         iconElement.style.color = '#ef4444';
-    } else {
+    } else if (trend < 0) {
         iconElement.className = 'fas fa-arrow-down';
         iconElement.style.color = '#10b981';
+    } else {
+        iconElement.className = 'fas fa-equals';
+        iconElement.style.color = 'rgba(255,255,255,0.5)';
     }
 }
 
@@ -481,10 +563,12 @@ function updateLiveFeed(agentId, data) {
         second: '2-digit'
     });
     
+    // XSS Prevention: escape agentId in live feed
+    const safeId = escapeHtml(agentId);
     const feedItem = `
         <div class="feed-item">
             <span class="feed-time">${time}</span>
-            <span class="feed-text">${agentId}: CPU ${data.cpu_percent.toFixed(1)}%, 
+            <span class="feed-text">${safeId}: CPU ${data.cpu_percent.toFixed(1)}%, 
             RAM ${data.memory_percent.toFixed(1)}%, 
             Disk ${data.disk_percent.toFixed(1)}%</span>
         </div>
@@ -506,6 +590,14 @@ function initDashboard() {
     
     // Update device list immediately
     updateDeviceList();
+    
+    // Bind search input to filter devices dynamically
+    const searchInput = document.getElementById('device-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            updateDeviceList();
+        });
+    }
     
     // Start periodic device list updates (every 5 seconds)
     deviceListInterval = setInterval(updateDeviceList, 5000);
@@ -548,6 +640,494 @@ function initDashboard() {
         if (deviceListInterval) clearInterval(deviceListInterval);
     });
 }
+
+// --- Authentication & Custom Features ---
+
+async function logout() {
+    try {
+        const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+            window.location.href = '/login';
+        } else {
+            showNotification('Logout failed', 'danger');
+        }
+    } catch (err) {
+        console.error('Logout error:', err);
+        showNotification('Connection error during logout', 'danger');
+    }
+}
+window.logout = logout;
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        if (onclickAttr.includes(tabId)) {
+            btn.classList.add('active');
+        }
+    });
+    
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
+    const targetPane = document.getElementById(tabId);
+    if (targetPane) {
+        targetPane.classList.add('active');
+    }
+    
+    if (selectedAgent) {
+        if (tabId === 'processes-tab') {
+            dispatchProcessList();
+        } else if (tabId === 'thresholds-tab') {
+            loadDeviceThresholds();
+        } else if (tabId === 'incidents-tab') {
+            loadIncidentsHistory();
+        }
+    }
+}
+window.switchTab = switchTab;
+
+let processPollingInterval = null;
+
+async function dispatchProcessList() {
+    if (!selectedAgent) {
+        showNotification('Please select a device first', 'warning');
+        return;
+    }
+    
+    const tbody = document.getElementById('process-list-body');
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="table-empty">
+                    <i class="fas fa-spinner fa-spin"></i> Requesting process list from device...
+                </td>
+            </tr>
+        `;
+    }
+    
+    try {
+        const response = await fetch('/api/command/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_id: selectedAgent,
+                action: 'list_processes'
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+            pollCommandStatus(data.command_id, 'list_processes');
+        } else {
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Failed to dispatch command: ${escapeHtml(data.message)}</td></tr>`;
+            }
+            showNotification(`Failed to request process list: ${data.message}`, 'danger');
+        }
+    } catch (err) {
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Connection error requesting process list</td></tr>`;
+        }
+        showNotification('Connection error requesting process list', 'danger');
+    }
+}
+window.dispatchProcessList = dispatchProcessList;
+
+function pollCommandStatus(cmdId, action) {
+    if (processPollingInterval) {
+        clearInterval(processPollingInterval);
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    processPollingInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(processPollingInterval);
+            handleCommandTimeout(action);
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/command/${cmdId}/status`);
+            const data = await response.json();
+            
+            if (response.ok && data.status) {
+                if (data.status === 'completed') {
+                    clearInterval(processPollingInterval);
+                    if (action === 'list_processes') {
+                        renderProcessList(data.output);
+                    } else if (action === 'kill_process') {
+                        showNotification('Process terminated successfully', 'success');
+                        dispatchProcessList();
+                    }
+                } else if (data.status === 'failed') {
+                    clearInterval(processPollingInterval);
+                    if (action === 'list_processes') {
+                        const tbody = document.getElementById('process-list-body');
+                        if (tbody) {
+                            tbody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Process list failed: ${escapeHtml(data.output)}</td></tr>`;
+                        }
+                    } else {
+                        showNotification(`Command execution failed: ${data.output}`, 'danger');
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error polling command status:', err);
+        }
+    }, 1000);
+}
+
+function handleCommandTimeout(action) {
+    if (action === 'list_processes') {
+        const tbody = document.getElementById('process-list-body');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Request timed out. The device is unresponsive.</td></tr>`;
+        }
+    } else {
+        showNotification('Command execution timed out', 'danger');
+    }
+}
+
+function renderProcessList(outputJson) {
+    const tbody = document.getElementById('process-list-body');
+    if (!tbody) return;
+    
+    try {
+        const processes = JSON.parse(outputJson);
+        if (!Array.isArray(processes) || processes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="table-empty">No running processes found.</td></tr>`;
+            return;
+        }
+        
+        let html = '';
+        processes.forEach(proc => {
+            const name = escapeHtml(proc.name || 'unknown');
+            const pid = Number(proc.pid);
+            const cpu = (Number(proc.cpu_percent) || 0).toFixed(1);
+            const mem = (Number(proc.memory_percent) || 0).toFixed(1);
+            
+            html += `
+                <tr>
+                    <td><code>${pid}</code></td>
+                    <td class="proc-name"><strong>${name}</strong></td>
+                    <td>${cpu}%</td>
+                    <td>${mem}%</td>
+                    <td>
+                        <button class="kill-btn" onclick="killProcess(${pid})">
+                            <i class="fas fa-trash-alt"></i> Kill
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Error rendering processes: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+async function killProcess(pid) {
+    if (!selectedAgent) return;
+    if (!confirm(`Are you sure you want to terminate process PID ${pid}?`)) return;
+    
+    showNotification(`Requesting termination for process ${pid}...`, 'info');
+    
+    try {
+        const response = await fetch('/api/command/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_id: selectedAgent,
+                action: 'kill_process',
+                payload: String(pid)
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+            pollCommandStatus(data.command_id, 'kill_process');
+        } else {
+            showNotification(`Failed to request process kill: ${data.message}`, 'danger');
+        }
+    } catch (err) {
+        showNotification('Connection error sending kill command', 'danger');
+    }
+}
+window.killProcess = killProcess;
+
+function runPresetCommand(command) {
+    const input = document.getElementById('terminal-input');
+    if (input) {
+        input.value = command;
+    }
+    const form = document.getElementById('terminal-form');
+    if (form) {
+        const event = new Event('submit', { cancelable: true });
+        form.dispatchEvent(event);
+    }
+}
+window.runPresetCommand = runPresetCommand;
+
+async function executeTerminalCommand(event) {
+    if (event) event.preventDefault();
+    
+    if (!selectedAgent) {
+        showNotification('Please select a device first', 'warning');
+        return;
+    }
+    
+    const input = document.getElementById('terminal-input');
+    if (!input) return;
+    
+    const command = input.value.trim();
+    if (!command) return;
+    
+    appendTerminalLine(`device:~# ${command}`, 'command-line');
+    input.value = '';
+    
+    appendTerminalLine('Executing command on device, please wait...', 'system-line');
+    
+    try {
+        const response = await fetch('/api/command/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_id: selectedAgent,
+                action: 'run_shell',
+                payload: command
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+            pollTerminalCommand(data.command_id);
+        } else {
+            appendTerminalLine(`Error: ${data.message}`, 'error-line');
+            showNotification(`Failed to dispatch command: ${data.message}`, 'danger');
+        }
+    } catch (err) {
+        appendTerminalLine('Connection error sending command to server', 'error-line');
+    }
+}
+window.executeTerminalCommand = executeTerminalCommand;
+
+function appendTerminalLine(text, className) {
+    const consoleDiv = document.getElementById('terminal-console');
+    if (!consoleDiv) return;
+    
+    const line = document.createElement('div');
+    line.className = `term-line ${className || ''}`;
+    
+    if (className === 'output-line') {
+        const pre = document.createElement('pre');
+        pre.textContent = text;
+        line.appendChild(pre);
+    } else {
+        line.textContent = text;
+    }
+    
+    consoleDiv.appendChild(line);
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+}
+
+let terminalPollingInterval = null;
+
+function pollTerminalCommand(cmdId) {
+    if (terminalPollingInterval) {
+        clearInterval(terminalPollingInterval);
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    terminalPollingInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(terminalPollingInterval);
+            appendTerminalLine('Command timed out.', 'error-line');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/command/${cmdId}/status`);
+            const data = await response.json();
+            
+            if (response.ok && data.status) {
+                if (data.status === 'completed') {
+                    clearInterval(terminalPollingInterval);
+                    appendTerminalLine(data.output, 'output-line');
+                } else if (data.status === 'failed') {
+                    clearInterval(terminalPollingInterval);
+                    appendTerminalLine(data.output, 'error-line');
+                }
+            }
+        } catch (err) {
+            console.error('Error polling terminal status:', err);
+        }
+    }, 1000);
+}
+
+function updateSliderLabel(metric) {
+    let warning = parseInt(document.getElementById(`${metric}-warning-range`).value);
+    let critical = parseInt(document.getElementById(`${metric}-critical-range`).value);
+    
+    if (warning >= critical) {
+        critical = warning + 5;
+        if (critical > 100) critical = 100;
+        document.getElementById(`${metric}-critical-range`).value = critical;
+    }
+    
+    const label = document.getElementById(`${metric}-thresh-val`);
+    if (label) {
+        label.textContent = `Warning: ${warning}% | Critical: ${critical}%`;
+    }
+}
+window.updateSliderLabel = updateSliderLabel;
+
+async function loadDeviceThresholds() {
+    if (!selectedAgent) return;
+    
+    try {
+        const response = await fetch(`/api/thresholds/${selectedAgent}`);
+        if (!response.ok) throw new Error('Failed to fetch thresholds');
+        
+        const data = await response.json();
+        
+        document.getElementById('cpu-warning-range').value = data.cpu_warning;
+        document.getElementById('cpu-critical-range').value = data.cpu_critical;
+        
+        document.getElementById('mem-warning-range').value = data.memory_warning;
+        document.getElementById('mem-critical-range').value = data.memory_critical;
+        
+        document.getElementById('disk-warning-range').value = data.disk_warning;
+        document.getElementById('disk-critical-range').value = data.disk_critical;
+        
+        updateSliderLabel('cpu');
+        updateSliderLabel('mem');
+        updateSliderLabel('disk');
+        
+    } catch (error) {
+        console.error('Error loading thresholds:', error);
+        showNotification('Error loading device thresholds', 'danger');
+    }
+}
+window.loadDeviceThresholds = loadDeviceThresholds;
+
+async function saveDeviceThresholds() {
+    if (!selectedAgent) {
+        showNotification('Please select a device first', 'warning');
+        return;
+    }
+    
+    const cpuWarning = parseFloat(document.getElementById('cpu-warning-range').value);
+    const cpuCritical = parseFloat(document.getElementById('cpu-critical-range').value);
+    const memWarning = parseFloat(document.getElementById('mem-warning-range').value);
+    const memCritical = parseFloat(document.getElementById('mem-critical-range').value);
+    const diskWarning = parseFloat(document.getElementById('disk-warning-range').value);
+    const diskCritical = parseFloat(document.getElementById('disk-critical-range').value);
+    
+    try {
+        const response = await fetch(`/api/thresholds/${selectedAgent}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cpu_warning: cpuWarning,
+                cpu_critical: cpuCritical,
+                memory_warning: memWarning,
+                memory_critical: memCritical,
+                disk_warning: diskWarning,
+                disk_critical: diskCritical
+            })
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+            showNotification('Thresholds saved successfully', 'success');
+        } else {
+            showNotification(`Failed to save thresholds: ${data.message}`, 'danger');
+        }
+    } catch (error) {
+        console.error('Error saving thresholds:', error);
+        showNotification('Connection error saving thresholds', 'danger');
+    }
+}
+window.saveDeviceThresholds = saveDeviceThresholds;
+
+async function loadIncidentsHistory() {
+    if (!selectedAgent) return;
+    
+    const container = document.getElementById('incidents-timeline-list');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="timeline-loading"><i class="fas fa-spinner fa-spin"></i> Loading incident logs...</div>';
+    
+    try {
+        const response = await fetch(`/api/incidents/${selectedAgent}`);
+        if (!response.ok) throw new Error('Failed to fetch incidents');
+        
+        const incidents = await response.json();
+        
+        if (!incidents || incidents.length === 0) {
+            container.innerHTML = '<div class="timeline-empty"><i class="fas fa-check-circle"></i> No incidents logged. Everything is running smoothly!</div>';
+            return;
+        }
+        
+        let html = '';
+        incidents.forEach(inc => {
+            const timeStr = formatTimeFull(inc.timestamp);
+            const dateStr = new Date(inc.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const metric = escapeHtml(inc.metric.toUpperCase());
+            const status = escapeHtml(inc.status);
+            const valueStr = inc.value !== null ? `${Number(inc.value).toFixed(1)}%` : '';
+            
+            let statusClass = 'resolved';
+            let icon = 'fa-check-circle';
+            if (status === 'critical') {
+                statusClass = 'critical';
+                icon = 'fa-exclamation-circle';
+            } else if (status === 'warning') {
+                statusClass = 'warning';
+                icon = 'fa-exclamation-triangle';
+            }
+            
+            let message = '';
+            if (inc.metric === 'connection') {
+                message = status === 'critical' ? 'Device went OFFLINE' : 'Device recovered ONLINE';
+            } else {
+                message = status === 'resolved' ? `${metric} utilization returned to normal` : `${metric} usage is ${status} at ${valueStr}`;
+            }
+            
+            html += `
+                <div class="incident-item ${statusClass}">
+                    <div class="incident-icon-wrapper">
+                        <i class="fas ${icon}"></i>
+                    </div>
+                    <div class="incident-info">
+                        <div class="incident-title">${message}</div>
+                        <div class="incident-meta">${timeStr} | Status: ${status} ${valueStr ? `| Value: ${valueStr}` : ''}</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading incidents:', error);
+        container.innerHTML = '<div class="timeline-empty text-danger"><i class="fas fa-times-circle"></i> Failed to load incidents.</div>';
+    }
+}
+window.loadIncidentsHistory = loadIncidentsHistory;
 
 // Export functions for global access
 window.updateDeviceList = updateDeviceList;

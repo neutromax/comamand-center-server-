@@ -35,6 +35,9 @@
                 <div class="server-status">
                     <div class="status-dot active"></div>
                     <span class="status-text">SERVER ONLINE</span>
+                    <button class="logout-btn-header" onclick="logout()" title="Sign Out">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
                 </div>
             </div>
 
@@ -68,7 +71,7 @@
                             <span class="step-label">Step 2: copy and paste 
                                 in terminal</span>
                             <div class="command-box">
-                                <code id="command-code">python agent.py --server https://comamand-center-server-2.onrender.com</code>
+                                <code id="command-code">python agent.py --server {{ server_url }}</code>
                                 <button class="copy-btn-sidebar" onclick="copyCommand()" title="Copy command">
                                     <i class="fas fa-copy"></i>
                                 </button>
@@ -112,6 +115,10 @@
                     <button id="refresh-devices" class="refresh-btn" title="Refresh devices">
                         <i class="fas fa-sync-alt"></i>
                     </button>
+                </div>
+                <div class="search-container-sidebar">
+                    <i class="fas fa-search search-icon-sidebar"></i>
+                    <input type="text" id="device-search" placeholder="Search devices..." autocomplete="off">
                 </div>
                 <div class="devices-scroll">
                     <ul id="device-list">
@@ -204,7 +211,7 @@
                                 <i class="fas fa-chart-line"></i>
                             </div>
                             <div>
-                                <h2 class="chart-title">Live Metrics Dashboard</h2>
+                                <h2 class="chart-title">Device Console</h2>
                                 <p class="chart-subtitle" id="selected-agent-name">Select a device to view metrics</p>
                             </div>
                         </div>
@@ -228,63 +235,209 @@
                         </div>
                     </div>
                     
-                    <!-- Metrics Cards -->
-                    <div class="metrics-summary">
-                        <div class="metric-card cpu-card">
-                            <div class="metric-header">
-                                <i class="fas fa-microchip"></i>
-                                <h3>CPU USAGE</h3>
+                    <!-- Tabs Navigation Bar -->
+                    <div class="dashboard-tabs">
+                        <button class="tab-btn active" onclick="switchTab('charts-tab')">
+                            <i class="fas fa-chart-line"></i> Charts & Feed
+                        </button>
+                        <button class="tab-btn" onclick="switchTab('processes-tab')">
+                            <i class="fas fa-tasks"></i> Processes
+                        </button>
+                        <button class="tab-btn" onclick="switchTab('terminal-tab')">
+                            <i class="fas fa-terminal"></i> Remote Shell
+                        </button>
+                        <button class="tab-btn" onclick="switchTab('thresholds-tab')">
+                            <i class="fas fa-sliders-h"></i> Custom Alerts
+                        </button>
+                        <button class="tab-btn" onclick="switchTab('incidents-tab')">
+                            <i class="fas fa-history"></i> Incident Logs
+                        </button>
+                    </div>
+
+                    <!-- Tab 1: Charts & Live Feed -->
+                    <div id="charts-tab" class="tab-pane active">
+                        <!-- Metrics Cards -->
+                        <div class="metrics-summary">
+                            <div class="metric-card cpu-card">
+                                <div class="metric-header">
+                                    <i class="fas fa-microchip"></i>
+                                    <h3>CPU USAGE</h3>
+                                </div>
+                                <div class="metric-value" id="cpu-value">--%</div>
+                                <div class="metric-trend">
+                                    <span id="cpu-trend">--</span>
+                                    <i class="fas fa-arrow-up" id="cpu-trend-icon"></i>
+                                </div>
                             </div>
-                            <div class="metric-value" id="cpu-value">--%</div>
-                            <div class="metric-trend">
-                                <span id="cpu-trend">--</span>
-                                <i class="fas fa-arrow-up" id="cpu-trend-icon"></i>
+                            <div class="metric-card memory-card">
+                                <div class="metric-header">
+                                    <i class="fas fa-memory"></i>
+                                    <h3>MEMORY</h3>
+                                </div>
+                                <div class="metric-value" id="memory-value">--%</div>
+                                <div class="metric-trend">
+                                    <span id="memory-trend">--</span>
+                                    <i class="fas fa-arrow-up" id="memory-trend-icon"></i>
+                                </div>
+                            </div>
+                            <div class="metric-card disk-card">
+                                <div class="metric-header">
+                                    <i class="fas fa-hdd"></i>
+                                    <h3>DISK</h3>
+                                </div>
+                                <div class="metric-value" id="disk-value">--%</div>
+                                <div class="metric-trend">
+                                    <span id="disk-trend">--</span>
+                                    <i class="fas fa-arrow-up" id="disk-trend-icon"></i>
+                                </div>
                             </div>
                         </div>
-                        <div class="metric-card memory-card">
-                            <div class="metric-header">
-                                <i class="fas fa-memory"></i>
-                                <h3>MEMORY</h3>
-                            </div>
-                            <div class="metric-value" id="memory-value">--%</div>
-                            <div class="metric-trend">
-                                <span id="memory-trend">--</span>
-                                <i class="fas fa-arrow-up" id="memory-trend-icon"></i>
-                            </div>
+
+                        <!-- Main Chart -->
+                        <div class="chart-wrapper-glass">
+                            <canvas id="metricsChart"></canvas>
                         </div>
-                        <div class="metric-card disk-card">
-                            <div class="metric-header">
-                                <i class="fas fa-hdd"></i>
-                                <h3>DISK</h3>
+
+                        <!-- Live Feed -->
+                        <div class="live-feed">
+                            <div class="feed-header">
+                                <i class="fas fa-wave-square"></i>
+                                <h3>LIVE DATA STREAM</h3>
+                                <div class="live-indicator">
+                                    <div class="pulse"></div>
+                                    LIVE
+                                </div>
                             </div>
-                            <div class="metric-value" id="disk-value">--%</div>
-                            <div class="metric-trend">
-                                <span id="disk-trend">--</span>
-                                <i class="fas fa-arrow-up" id="disk-trend-icon"></i>
+                            <div class="feed-content" id="live-feed-content">
+                                <div class="feed-item">
+                                    <span class="feed-time">--:--:--</span>
+                                    <span class="feed-text">Waiting for data...</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Main Chart -->
-                    <div class="chart-wrapper-glass">
-                        <canvas id="metricsChart"></canvas>
+                    <!-- Tab 2: Processes manager -->
+                    <div id="processes-tab" class="tab-pane">
+                        <div class="tab-header-actions">
+                            <h3><i class="fas fa-tasks"></i> Running Processes</h3>
+                            <button class="control-btn" id="btn-refresh-processes" onclick="dispatchProcessList()">
+                                <i class="fas fa-sync-alt"></i> Refresh Processes
+                            </button>
+                        </div>
+                        <div class="process-table-container">
+                            <table class="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process Name</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="process-list-body">
+                                    <tr>
+                                        <td colspan="5" class="table-empty">Click "Refresh Processes" to query device...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <!-- Live Feed -->
-                    <div class="live-feed">
-                        <div class="feed-header">
-                            <i class="fas fa-wave-square"></i>
-                            <h3>LIVE DATA STREAM</h3>
-                            <div class="live-indicator">
-                                <div class="pulse"></div>
-                                LIVE
+                    <!-- Tab 3: Remote Terminal -->
+                    <div id="terminal-tab" class="tab-pane">
+                        <div class="tab-header-actions">
+                            <h3><i class="fas fa-terminal"></i> Remote Terminal Shell</h3>
+                        </div>
+                        <p class="tab-desc">Run whitelisted diagnostics commands securely on the target device.</p>
+                        
+                        <div class="terminal-preset-buttons">
+                            <button class="preset-btn" onclick="runPresetCommand('uptime')">Uptime</button>
+                            <button class="preset-btn" onclick="runPresetCommand('df -h')">Disk Usage (df -h)</button>
+                            <button class="preset-btn" onclick="runPresetCommand('free -m')">RAM Info (free -m)</button>
+                            <button class="preset-btn" onclick="runPresetCommand('ipconfig')">IP Config</button>
+                            <button class="preset-btn" onclick="runPresetCommand('netstat -an')">Netstat</button>
+                        </div>
+                        
+                        <div class="terminal-wrapper">
+                            <div class="terminal-screen" id="terminal-console">
+                                <span class="term-prompt">device:~# </span><span class="term-text">Type or select a command to execute...</span>
+                            </div>
+                            <form id="terminal-form" onsubmit="executeTerminalCommand(event)">
+                                <div class="terminal-input-wrapper">
+                                    <span class="term-input-prompt">device:~#</span>
+                                    <input type="text" id="terminal-input" placeholder="Type whitelisted command..." autocomplete="off">
+                                    <button type="submit" class="terminal-submit-btn">Run</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Tab 4: Custom Alarm Thresholds -->
+                    <div id="thresholds-tab" class="tab-pane">
+                        <div class="tab-header-actions">
+                            <h3><i class="fas fa-sliders-h"></i> Custom Alarm Thresholds</h3>
+                            <button class="control-btn" id="btn-save-thresholds" onclick="saveDeviceThresholds()">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                        </div>
+                        <p class="tab-desc">Configure CPU, Memory, and Disk alarm limits for this specific device.</p>
+                        
+                        <div class="threshold-sliders-grid">
+                            <div class="threshold-slider-card">
+                                <div class="slider-header">
+                                    <h4>CPU Usage</h4>
+                                    <span class="slider-val" id="cpu-thresh-val">Warning: 60% | Critical: 80%</span>
+                                </div>
+                                <div class="slider-inputs">
+                                    <label>Warning Threshold (%)</label>
+                                    <input type="range" id="cpu-warning-range" min="10" max="95" value="60" oninput="updateSliderLabel('cpu')">
+                                    <label>Critical Threshold (%)</label>
+                                    <input type="range" id="cpu-critical-range" min="15" max="99" value="80" oninput="updateSliderLabel('cpu')">
+                                </div>
+                            </div>
+                            
+                            <div class="threshold-slider-card">
+                                <div class="slider-header">
+                                    <h4>Memory Usage</h4>
+                                    <span class="slider-val" id="mem-thresh-val">Warning: 60% | Critical: 80%</span>
+                                </div>
+                                <div class="slider-inputs">
+                                    <label>Warning Threshold (%)</label>
+                                    <input type="range" id="mem-warning-range" min="10" max="95" value="60" oninput="updateSliderLabel('mem')">
+                                    <label>Critical Threshold (%)</label>
+                                    <input type="range" id="mem-critical-range" min="15" max="99" value="80" oninput="updateSliderLabel('mem')">
+                                </div>
+                            </div>
+                            
+                            <div class="threshold-slider-card">
+                                <div class="slider-header">
+                                    <h4>Disk Usage</h4>
+                                    <span class="slider-val" id="disk-thresh-val">Warning: 60% | Critical: 80%</span>
+                                </div>
+                                <div class="slider-inputs">
+                                    <label>Warning Threshold (%)</label>
+                                    <input type="range" id="disk-warning-range" min="10" max="95" value="60" oninput="updateSliderLabel('disk')">
+                                    <label>Critical Threshold (%)</label>
+                                    <input type="range" id="disk-critical-range" min="15" max="99" value="80" oninput="updateSliderLabel('disk')">
+                                </div>
                             </div>
                         </div>
-                        <div class="feed-content" id="live-feed-content">
-                            <div class="feed-item">
-                                <span class="feed-time">--:--:--</span>
-                                <span class="feed-text">Waiting for data...</span>
-                            </div>
+                    </div>
+
+                    <!-- Tab 5: Incident Logs -->
+                    <div id="incidents-tab" class="tab-pane">
+                        <div class="tab-header-actions">
+                            <h3><i class="fas fa-history"></i> Incident Alert History</h3>
+                            <button class="control-btn" onclick="loadIncidentsHistory()">
+                                <i class="fas fa-sync-alt"></i> Refresh Logs
+                            </button>
+                        </div>
+                        <p class="tab-desc">Historical record of all warning, critical, and recovery events for this device.</p>
+                        
+                        <div class="incidents-timeline-container" id="incidents-timeline-list">
+                            <div class="timeline-empty">Loading history logs...</div>
                         </div>
                     </div>
                 </div>
@@ -340,8 +493,26 @@
             });
         }
         
-        // Show notification
+        // Reposition all visible notifications
+        function repositionNotifications() {
+            const visible = document.querySelectorAll('.notification');
+            visible.forEach((el, index) => {
+                el.style.top = `${20 + (index * 70)}px`;
+            });
+        }
+
+        // Show notification with stacking limit and automatic repositioning
         function showNotification(message, type) {
+            const maxVisible = 3;
+            let existing = document.querySelectorAll('.notification');
+            
+            if (existing.length >= maxVisible) {
+                const oldest = existing[0];
+                oldest.classList.remove('show');
+                oldest.remove();
+                existing = document.querySelectorAll('.notification');
+            }
+            
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
             notification.innerHTML = `
@@ -352,10 +523,8 @@
                 ${message}
             `;
             document.body.appendChild(notification);
-            // stack notifications instead of overlapping
-            const visible = document.querySelectorAll('.notification').length - 1;
-            notification.style.top = `${20 + (visible * 70)}px`;
-
+            
+            repositionNotifications();
             
             setTimeout(() => {
                 notification.classList.add('show');
@@ -364,9 +533,12 @@
             setTimeout(() => {
                 notification.classList.remove('show');
                 setTimeout(() => {
-                    document.body.removeChild(notification);
+                    if (notification.parentNode) {
+                        notification.remove();
+                        repositionNotifications();
+                    }
                 }, 300);
-            }, 3000);
+            }, 4000);
         }
         
         // Scroll to download section

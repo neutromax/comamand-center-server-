@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Center - Secure Login</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: var(--shadow-lg);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        }
+        
+        .login-header {
+            margin-bottom: 35px;
+        }
+        
+        .login-logo {
+            font-size: 45px;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.4));
+        }
+        
+        .login-header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, var(--primary-light), #fff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .login-header p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 13px;
+        }
+        
+        .input-group {
+            position: relative;
+            margin-bottom: 22px;
+            text-align: left;
+        }
+        
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .input-wrapper i {
+            position: absolute;
+            left: 15px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 16px;
+        }
+        
+        .input-wrapper input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 15px 12px 45px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .input-wrapper input:focus {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary-light);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+        }
+        
+        .submit-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(99, 102, 241, 0.4);
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+        }
+        
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="gradient-1"></div>
+        <div class="gradient-2"></div>
+    </div>
+    
+    <div class="login-container">
+        <div class="login-header">
+            <div class="login-logo">
+                <i class="fas fa-satellite-dish"></i>
+            </div>
+            <h1>COMMAND CENTER</h1>
+            <p>Access secure monitoring dashboard</p>
+        </div>
+        
+        <div id="error-box" class="error-message">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="error-text">Invalid login credentials</span>
+        </div>
+        
+        <form id="login-form">
+            <div class="input-group">
+                <label for="username">Username</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label for="password">Password</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+            </div>
+            
+            <button type="submit" class="submit-btn">
+                <span>SIGN IN</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const usernameInput = document.getElementById('username').value;
+            const passwordInput = document.getElementById('password').value;
+            const errorBox = document.getElementById('error-box');
+            const errorText = document.getElementById('error-text');
+            
+            errorBox.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: usernameInput,
+                        password: passwordInput
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'ok') {
+                    window.location.href = '/';
+                } else {
+                    errorText.textContent = data.message || 'Invalid credentials';
+                    errorBox.style.display = 'flex';
+                }
+            } catch (err) {
+                errorText.textContent = 'Server connection error';
+                errorBox.style.display = 'flex';
+            }
+        });
+    </script>
+</body>
+</html>
