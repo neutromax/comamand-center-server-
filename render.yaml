@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: command-center-server
+    env: python
+    plan: free
+    buildCommand: pip install -r server/requirements.txt
+    startCommand: gunicorn --chdir server app:app
+    envVars:
+      - key: COMMAND_CENTER_API_KEY
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: command-center-db
+          property: connectionString
+
+databases:
+  - name: command-center-db
+    plan: free

@@ -39,6 +39,8 @@ CORS(app, origins=ALLOWED_ORIGINS)
 
 # Database configuration
 DATABASE_PATH = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'monitoring.db')}")
+if DATABASE_PATH.startswith("postgres://"):
+    DATABASE_PATH = DATABASE_PATH.replace("postgres://", "postgresql://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_PATH
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 300}
