@@ -202,6 +202,27 @@ body {
     letter-spacing: 1px;
 }
 
+.logout-btn-header {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--danger);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+}
+
+.logout-btn-header:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: var(--danger);
+    transform: scale(1.1);
+}
+
 /* Glass Card */
 .glass-card {
     background: var(--glass);

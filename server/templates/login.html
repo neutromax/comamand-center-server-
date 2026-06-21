@@ -200,6 +200,36 @@
             opacity: 1;
             margin-bottom: 22px;
         }
+
+        .input-group-options {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            margin-bottom: 22px;
+            font-size: 13px;
+        }
+        
+        .remember-me-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.3s ease;
+        }
+        
+        .remember-me-label:hover {
+            color: white;
+        }
+        
+        .remember-me-label input {
+            cursor: pointer;
+            accent-color: var(--primary);
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -245,6 +275,13 @@
                 </div>
             </div>
 
+            <div class="input-group-options" id="remember-me-group">
+                <label class="remember-me-label">
+                    <input type="checkbox" id="remember-me">
+                    <span>Remember Me</span>
+                </label>
+            </div>
+
             <div class="input-group input-group-confirm" id="confirm-password-group">
                 <label for="confirm-password">Confirm Password</label>
                 <div class="input-wrapper">
@@ -271,6 +308,7 @@
             const registerTab = document.getElementById('tab-register');
             const confirmGroup = document.getElementById('confirm-password-group');
             const confirmInput = document.getElementById('confirm-password');
+            const rememberGroup = document.getElementById('remember-me-group');
             const submitBtnText = document.getElementById('submit-btn-text');
             const headerDesc = document.getElementById('header-desc');
             const errorBox = document.getElementById('error-box');
@@ -282,6 +320,7 @@
                 registerTab.classList.remove('active');
                 confirmGroup.classList.remove('show');
                 confirmInput.removeAttribute('required');
+                rememberGroup.style.display = 'flex';
                 submitBtnText.textContent = 'SIGN IN';
                 headerDesc.textContent = 'Access secure monitoring dashboard';
             } else {
@@ -289,6 +328,7 @@
                 loginTab.classList.remove('active');
                 confirmGroup.classList.add('show');
                 confirmInput.setAttribute('required', 'required');
+                rememberGroup.style.display = 'none';
                 submitBtnText.textContent = 'CREATE ACCOUNT';
                 headerDesc.textContent = 'Create a new local account';
             }
@@ -304,6 +344,11 @@
             
             errorBox.style.display = 'none';
             
+            const payload = {
+                username: usernameInput,
+                password: passwordInput
+            };
+            
             if (currentMode === 'register') {
                 const confirmPasswordInput = document.getElementById('confirm-password').value;
                 if (passwordInput !== confirmPasswordInput) {
@@ -317,6 +362,14 @@
                     errorBox.style.display = 'flex';
                     return;
                 }
+            } else {
+                const rememberMe = document.getElementById('remember-me').checked;
+                payload.remember = rememberMe;
+                if (rememberMe) {
+                    localStorage.setItem('remembered_username', usernameInput);
+                } else {
+                    localStorage.removeItem('remembered_username');
+                }
             }
             
             const endpoint = currentMode === 'login' ? '/api/auth/login' : '/api/auth/register';
@@ -327,10 +380,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        username: usernameInput,
-                        password: passwordInput
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 const data = await response.json();
@@ -344,6 +394,17 @@
             } catch (err) {
                 errorText.textContent = 'Server connection error';
                 errorBox.style.display = 'flex';
+            }
+        });
+
+        // Prefill remembered username
+        document.addEventListener('DOMContentLoaded', () => {
+            const remembered = localStorage.getItem('remembered_username');
+            if (remembered) {
+                const usernameField = document.getElementById('username');
+                const rememberCheckbox = document.getElementById('remember-me');
+                if (usernameField) usernameField.value = remembered;
+                if (rememberCheckbox) rememberCheckbox.checked = true;
             }
         });
     </script>

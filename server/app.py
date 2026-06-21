@@ -46,6 +46,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 300}
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.secret_key = os.environ.get("SESSION_SECRET", "command_center_session_secure_secret_key_123")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 
 # Initialize database
 db.init_app(app)
@@ -264,6 +265,10 @@ def auth_login():
         if user and check_password_hash(user.password_hash, data["password"]):
             session["logged_in"] = True
             session["username"] = user.username
+            if data.get("remember"):
+                session.permanent = True
+            else:
+                session.permanent = False
             return jsonify({"status": "ok", "message": "Login successful"})
             
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
@@ -793,10 +798,7 @@ if DEBUG_MODE:
 @app.route("/download/agent")
 @login_required
 def download_agent():
-    agent_path = os.path.join(
-        os.path.dirname(BASE_DIR),  # project root
-        "agent"
-    )
+    agent_path = os.path.dirname(BASE_DIR)  # project root
     return send_from_directory(
         agent_path,
         "agent.py",
