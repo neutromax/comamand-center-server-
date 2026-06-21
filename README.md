@@ -8,7 +8,7 @@ The system provides live visualization, historical analytics, health alerts, and
 
 ## Live Demo
 
-Check out the live application: [**Command Center Demo**](https://comamand-center-server-2.onrender.com)
+Check out the live application: [**Command Center Demo**](https://comamand-center-server-1.onrender.com/)
 
 > *Experience the real-time monitoring dashboard in action!*
 
@@ -149,30 +149,6 @@ server/
 
 ---
 
-## Deployment
-
-### One-Click Deploy to Render
-
-You can deploy the app along with its PostgreSQL database automatically using the Render Blueprint button:
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/neutromax/comamand-center-server-)
-
-### Manual Deployment on Render
-If you prefer to deploy manually:
-
-1. **Create a PostgreSQL Database** on Render. Note the connection string.
-2. **Create a Web Service** on Render:
-   - Connect it to your GitHub repository.
-   - **Environment:** `Python`
-   - **Build Command:** `pip install -r server/requirements.txt`
-   - **Start Command:** `gunicorn --chdir server app:app`
-3. **Environment Variables**:
-   - Add `DATABASE_URL` (set to your PostgreSQL database connection string).
-   - Add `COMMAND_CENTER_API_KEY` (used to sign and secure agent telemetry reports).
-   - Add `SESSION_SECRET` (used to secure cookie-based dashboard logins).
-
----
-
 ## Use Cases
 
 Remote system monitoring
@@ -206,7 +182,7 @@ Developed by **Bhavith**.
 
 - GitHub: [@neutromax](https://github.com/neutromax)
 - Project Link: [https://github.com/neutromax/comamand-center-server-](https://github.com/neutromax/comamand-center-server-)
-- Live Demo: [https://comamand-center-server-2.onrender.com](https://comamand-center-server-2.onrender.com)
+- Live Demo: [https://comamand-center-server-2.onrender.com](https://comamand-center-server-1.onrender.com/)
 
 ---
 
