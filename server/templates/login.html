@@ -155,6 +155,51 @@
             align-items: center;
             gap: 10px;
         }
+        
+        .auth-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 4px;
+            margin-bottom: 25px;
+            position: relative;
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 10px 15px;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+            user-select: none;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        
+        .auth-tab.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+        
+        .input-group-confirm {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            margin-bottom: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .input-group-confirm.show {
+            max-height: 100px;
+            opacity: 1;
+            margin-bottom: 22px;
+        }
     </style>
 </head>
 <body>
@@ -170,7 +215,12 @@
                 <i class="fas fa-satellite-dish"></i>
             </div>
             <h1>COMMAND CENTER</h1>
-            <p>Access secure monitoring dashboard</p>
+            <p id="header-desc">Access secure monitoring dashboard</p>
+        </div>
+
+        <div class="auth-tabs">
+            <div class="auth-tab active" id="tab-login" onclick="setMode('login')">Sign In</div>
+            <div class="auth-tab" id="tab-register" onclick="setMode('register')">Register</div>
         </div>
         
         <div id="error-box" class="error-message">
@@ -194,27 +244,85 @@
                     <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
                 </div>
             </div>
+
+            <div class="input-group input-group-confirm" id="confirm-password-group">
+                <label for="confirm-password">Confirm Password</label>
+                <div class="input-wrapper">
+                    <i class="fas fa-check-double"></i>
+                    <input type="password" id="confirm-password" placeholder="Re-enter password" autocomplete="new-password">
+                </div>
+            </div>
             
-            <button type="submit" class="submit-btn">
-                <span>SIGN IN</span>
-                <i class="fas fa-arrow-right"></i>
+            <button type="submit" class="submit-btn" id="submit-btn">
+                <span id="submit-btn-text">SIGN IN</span>
+                <i class="fas fa-arrow-right" id="submit-btn-icon"></i>
             </button>
         </form>
     </div>
 
     <script>
+        let currentMode = 'login';
+
+        function setMode(mode) {
+            if (currentMode === mode) return;
+            currentMode = mode;
+            
+            const loginTab = document.getElementById('tab-login');
+            const registerTab = document.getElementById('tab-register');
+            const confirmGroup = document.getElementById('confirm-password-group');
+            const confirmInput = document.getElementById('confirm-password');
+            const submitBtnText = document.getElementById('submit-btn-text');
+            const headerDesc = document.getElementById('header-desc');
+            const errorBox = document.getElementById('error-box');
+            
+            errorBox.style.display = 'none';
+            
+            if (mode === 'login') {
+                loginTab.classList.add('active');
+                registerTab.classList.remove('active');
+                confirmGroup.classList.remove('show');
+                confirmInput.removeAttribute('required');
+                submitBtnText.textContent = 'SIGN IN';
+                headerDesc.textContent = 'Access secure monitoring dashboard';
+            } else {
+                registerTab.classList.add('active');
+                loginTab.classList.remove('active');
+                confirmGroup.classList.add('show');
+                confirmInput.setAttribute('required', 'required');
+                submitBtnText.textContent = 'CREATE ACCOUNT';
+                headerDesc.textContent = 'Create a new local account';
+            }
+        }
+
         document.getElementById('login-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const usernameInput = document.getElementById('username').value;
+            const usernameInput = document.getElementById('username').value.trim();
             const passwordInput = document.getElementById('password').value;
             const errorBox = document.getElementById('error-box');
             const errorText = document.getElementById('error-text');
             
             errorBox.style.display = 'none';
             
+            if (currentMode === 'register') {
+                const confirmPasswordInput = document.getElementById('confirm-password').value;
+                if (passwordInput !== confirmPasswordInput) {
+                    errorText.textContent = 'Passwords do not match';
+                    errorBox.style.display = 'flex';
+                    return;
+                }
+                
+                if (passwordInput.length < 6) {
+                    errorText.textContent = 'Password must be at least 6 characters';
+                    errorBox.style.display = 'flex';
+                    return;
+                }
+            }
+            
+            const endpoint = currentMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+            
             try {
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -230,7 +338,7 @@
                 if (response.ok && data.status === 'ok') {
                     window.location.href = '/';
                 } else {
-                    errorText.textContent = data.message || 'Invalid credentials';
+                    errorText.textContent = data.message || 'Authentication failed';
                     errorBox.style.display = 'flex';
                 }
             } catch (err) {

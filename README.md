@@ -1,4 +1,4 @@
-# 🚀 Command Center – Real-Time System Monitoring Dashboard
+# Command Center - Real-Time System Monitoring Dashboard
 
 A modern real-time monitoring platform that tracks CPU, Memory, and Disk usage across multiple devices using lightweight agents.
 
@@ -6,38 +6,37 @@ The system provides live visualization, historical analytics, health alerts, and
 
 ---
 
-## 🌐 Live Demo
+## Live Demo
 
 Check out the live application: [**Command Center Demo**](https://comamand-center-server-2.onrender.com)
 
-> ⚡ *Experience the real-time monitoring dashboard in action!*
+> *Experience the real-time monitoring dashboard in action!*
 
 ---
 
-## ✨ Features
+## Features
 
-- 📡 Real-time device monitoring  
-- 📊 Live CPU / Memory / Disk charts  
-- 🧠 Smart health detection (Good / Warning / Critical)  
-- 🔔 Intelligent alert system with cooldown (no spam)  
-- 🖥️ Multiple device support  
-- 📁 Historical metrics tracking  
-- ⬇️ Export chart as image  
-- 🎯 Clean glassmorphism UI  
-- ⚡ Smooth animated updates  
+- Real-time device monitoring  
+- Live CPU / Memory / Disk charts  
+- Smart health detection (Good / Warning / Critical)  
+- Intelligent alert system with cooldown (no spam)  
+- Multiple device support  
+- Historical metrics tracking  
+- Export chart as image  
+- Clean glassmorphism UI  
+- Smooth animated updates  
 
 ---
 
-## 🧩 Architecture
+## Architecture
+
 Agent (Python) → Flask API Server → Web Dashboard (Chart.js)
-
-text
 
 Each device runs a small agent that periodically sends system metrics to the server.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Flask](https://img.shields.io/badge/Backend-Flask-green)
@@ -57,7 +56,7 @@ Each device runs a small agent that periodically sends system metrics to the ser
 
 ---
 
-## 📦 Setup Instructions
+## Setup Instructions
 
 ### Clone the repository
 ```bash
@@ -96,7 +95,8 @@ python agent.py --server http://127.0.0.1:5000
 
 ---
 
-## 🚨 Alert System
+## Alert System
+
 Notifications are triggered when:
 
 Usage > 60% → Warning
@@ -107,7 +107,8 @@ To prevent spam, alerts are rate-limited (example: once every 5 minutes per metr
 
 ---
 
-## 📊 Dashboard Capabilities
+## Dashboard Capabilities
+
 Device health prioritization
 
 Auto-refresh metrics
@@ -120,7 +121,7 @@ One-click refresh
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 ```bash
 server/
 │── app.py
@@ -138,7 +139,7 @@ server/
 ```
 
 ---
-## 📸 Screenshots
+## Screenshots
 
 ### Home Page
 ![Home Page](screenshots/home.png)
@@ -148,9 +149,9 @@ server/
 
 ---
 
-## 🌍 Deployment
+## Deployment
 
-### 🚀 One-Click Deploy to Render
+### One-Click Deploy to Render
 
 You can deploy the app along with its PostgreSQL database automatically using the Render Blueprint button:
 
@@ -172,7 +173,8 @@ If you prefer to deploy manually:
 
 ---
 
-## 🎯 Use Cases
+## Use Cases
+
 Remote system monitoring
 
 Lab infrastructure
@@ -185,7 +187,8 @@ Network device supervision
 
 ---
 
-## 🔮 Future Improvements
+## Future Improvements
+
 Authentication system
 
 Per-device alert settings
@@ -197,7 +200,7 @@ Role-based access
 Advanced analytics
 
 ---
-## 👨‍💻 Author
+## Author
 
 Developed by **Bhavith**.
 
@@ -207,8 +210,6 @@ Developed by **Bhavith**.
 
 ---
 
-## 📜 License
+## License
+
 This project is for educational and portfolio purposes.
-
-
-

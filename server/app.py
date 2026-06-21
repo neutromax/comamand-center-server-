@@ -270,6 +270,51 @@ def auth_login():
     except Exception as e:
         return jsonify({"status": "error", "message": sanitize_error(e)}), 500
 
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    try:
+        data = request.get_json(silent=True)
+        if not data or "username" not in data or "password" not in data:
+            return jsonify({"status": "error", "message": "Username and password required"}), 400
+            
+        username = data["username"].strip()
+        password = data["password"]
+        
+        if not username or not password:
+            return jsonify({"status": "error", "message": "Username and password cannot be empty"}), 400
+            
+        if len(username) < 3 or len(username) > 50:
+            return jsonify({"status": "error", "message": "Username must be between 3 and 50 characters"}), 400
+            
+        if not re.match(r"^[a-zA-Z0-9_-]+$", username):
+            return jsonify({"status": "error", "message": "Username can only contain letters, numbers, underscores, and dashes"}), 400
+            
+        if len(password) < 6:
+            return jsonify({"status": "error", "message": "Password must be at least 6 characters"}), 400
+            
+        # Check if user already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return jsonify({"status": "error", "message": "Username already exists"}), 400
+            
+        # Create user
+        new_user = User(
+            username=username,
+            password_hash=generate_password_hash(password)
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        
+        # Log user in
+        session["logged_in"] = True
+        session["username"] = username
+        
+        logger.info(f"User registered successfully: {username}")
+        return jsonify({"status": "ok", "message": "Registration successful"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": sanitize_error(e)}), 500
+
 @app.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
     session.pop("logged_in", None)

@@ -20,7 +20,7 @@ def get_metrics():
     base_cpu = psutil.cpu_percent(interval=0.5)
     base_memory = psutil.virtual_memory().percent
     
-    # Add slight variation for realistic testing (±5%)
+    # Add slight variation for realistic testing (+/-2%)
     cpu = max(0, min(100, base_cpu + random.uniform(-2, 2)))
     memory = max(0, min(100, base_memory + random.uniform(-2, 2)))
     
@@ -44,7 +44,7 @@ def handle_server_command(server_url, api_key, command_info):
     action = command_info.get("action")
     payload = command_info.get("payload", "")
     
-    print(f"\n⚙️ Received command #{cmd_id}: {action} (payload: {payload})")
+    print(f"\n[Command] Received command #{cmd_id}: {action} (payload: {payload})")
     
     status = "failed"
     output = ""
@@ -144,11 +144,11 @@ def handle_server_command(server_url, api_key, command_info):
     try:
         resp = requests.post(result_url, data=raw_payload, headers=headers, timeout=5)
         if resp.status_code == 200:
-            print(f"✅ Sent result for command #{cmd_id} (Status: {status})")
+            print(f"[Success] Sent result for command #{cmd_id} (Status: {status})")
         else:
-            print(f"❌ Failed to report command #{cmd_id} result: {resp.status_code}")
+            print(f"[Error] Failed to report command #{cmd_id} result: {resp.status_code}")
     except Exception as e:
-        print(f"❌ Connection error sending command result: {e}")
+        print(f"[Error] Connection error sending command result: {e}")
 
 def main():
     # Parse command line arguments
@@ -173,7 +173,7 @@ def main():
         AGENT_ID = f"{socket.gethostname()}-{platform.system()}"
     
     print("=" * 60)
-    print("🤖 COMMAND CENTER AGENT")
+    print("COMMAND CENTER AGENT")
     print("=" * 60)
     print(f"Agent ID: {AGENT_ID}")
     print(f"Server: {SERVER_URL}")
@@ -181,17 +181,17 @@ def main():
     print("=" * 60)
     
     # Test connection first
-    print("\n🔍 Testing server connection...")
+    print("\nTesting server connection...")
     try:
         response = requests.get(f"{SERVER_URL}/api/server/info", timeout=5)
         if response.status_code == 200:
-            print("✅ Connected to server!")
+            print("[Success] Connected to server!")
             print(f"   Server status: {response.json().get('status', 'unknown')}")
         else:
-            print(f"⚠️ Server returned: {response.status_code}")
+            print(f"[Warning] Server returned: {response.status_code}")
             print("   But let's try to send data anyway...")
     except Exception as e:
-        print(f"❌ Cannot connect to server: {e}")
+        print(f"[Error] Cannot connect to server: {e}")
         print("\nTROUBLESHOOTING:")
         print("1. Make sure server is running: python app.py")
         print("2. Check if URL is correct: http://127.0.0.1:5000")
@@ -199,7 +199,7 @@ def main():
         print("4. Try using: http://localhost:5000")
         return
     
-    print(f"\n📡 Starting to send metrics every {INTERVAL} seconds...")
+    print(f"\n[Info] Starting to send metrics every {INTERVAL} seconds...")
     print("Press Ctrl+C to stop\n")
     
     count = 0
@@ -247,7 +247,7 @@ def main():
                 )
                 
                 if response.status_code == 200:
-                    print(" ✅ Sent to server")
+                    print(" [Success] Sent to server")
                     # Check if server returned a pending command
                     try:
                         resp_json = response.json()
@@ -255,25 +255,25 @@ def main():
                         if command_info:
                             handle_server_command(SERVER_URL, args.key, command_info)
                     except Exception as e:
-                        print(f" ⚠️ Command check error: {e}")
+                        print(f" [Warning] Command check error: {e}")
                 else:
-                    print(f" ❌ Server error: {response.status_code}")
+                    print(f" [Error] Server error: {response.status_code}")
                     
             except requests.exceptions.ConnectionError:
-                print(" ❌ Connection refused")
+                print(" [Error] Connection refused")
                 print("   Is server still running?")
             except requests.exceptions.Timeout:
-                print(" ⏱️ Timeout")
+                print(" [Error] Timeout")
             except Exception as e:
-                print(f" ❌ Error: {str(e)[:30]}...")
+                print(f" [Error] Error: {str(e)[:30]}...")
             
             
             time.sleep(INTERVAL)
             
     except KeyboardInterrupt:
-        print("\n\n👋 Agent stopped by user")
+        print("\n\nAgent stopped by user")
     except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
+        print(f"\n[Fatal Error] {e}")
         import traceback
         traceback.print_exc()
 
