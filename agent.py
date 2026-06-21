@@ -153,8 +153,8 @@ def handle_server_command(server_url, api_key, command_info):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Command Center Agent')
-    parser.add_argument('--server', default='http://127.0.0.1:5000', 
-                       help='Server URL (default: http://127.0.0.1:5000)')
+    parser.add_argument('--server', default='https://comamand-center-server-1.onrender.com', 
+                       help='Server URL (default: https://comamand-center-server-1.onrender.com)')
     parser.add_argument('--interval', type=int, default=10,
                        help='Update interval in seconds (default: 10)')
     parser.add_argument('--name', help='Custom agent name')
