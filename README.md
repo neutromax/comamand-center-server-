@@ -8,7 +8,7 @@ The system provides live visualization, historical analytics, health alerts, and
 
 ## 🌐 Live Demo
 
-Check out the live application: [**Command Center Demo**](https://comamand-center-server-2.onrender.com)
+Check out the live application: [**Command Center Demo**](https://comamand-center-server-1.onrender.com/)
 
 > ⚡ *Experience the real-time monitoring dashboard in action!*
 
@@ -180,7 +180,7 @@ Developed by **Bhavith**.
 
 - GitHub: [@neutromax](https://github.com/neutromax)
 - Project Link: [https://github.com/neutromax/comamand-center-server-](https://github.com/neutromax/comamand-center-server-)
-- Live Demo: [https://comamand-center-server-2.onrender.com](https://comamand-center-server-2.onrender.com)
+- Live Demo: [https://comamand-center-server-2.onrender.com](https://comamand-center-server-1.onrender.com/)
 
 ---
 
